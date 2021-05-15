@@ -1,0 +1,28 @@
+[package]
+authors = ["Robert Collins <robertc@robertcollins.net>"]
+description = "the demons cellular automaton"
+edition = "2018"
+license = "Apache-2"
+name = "demons"
+repository = "https://github.com/rbtcollins/demons.git"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+console_error_panic_hook = "0.1.6"
+js-sys = "0.3.50"
+wasm-bindgen = "0.2.73"
+
+[dependencies.web-sys]
+features = [
+  'console',
+  'CanvasRenderingContext2d',
+  'HtmlCanvasElement',
+  'ImageData',
+]
+version = "0.3.4"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
