@@ -1,3 +1,3 @@
 # Demons cellular automaton
 
-2D Canvas based version
+WebGL Canvas based version

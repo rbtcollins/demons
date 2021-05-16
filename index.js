@@ -8,7 +8,6 @@ import('./pkg')
             }
         }
         const canvas = document.getElementById('drawing');
-        const ctx = canvas.getContext('2d');
         const loop = new wasm.Loop(canvas);
         wasm.set_panic_hook();
         const renderLoop = () => {

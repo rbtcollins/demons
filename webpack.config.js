@@ -15,6 +15,7 @@ module.exports = {
         }),
         new WasmPackPlugin({
             crateDirectory: path.resolve(__dirname, "."),
+            extraArgs: "-- --features=console_error_panic_hook",
             forceMode: "production",
         }),
         // Have this example work in Edge which doesn't ship `TextEncoder` or
