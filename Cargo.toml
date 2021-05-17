@@ -4,6 +4,7 @@ description = "the demons cellular automaton"
 edition = "2018"
 license = "Apache-2"
 name = "demons"
+publish = false
 repository = "https://github.com/rbtcollins/demons.git"
 version = "0.1.0"
 
@@ -11,7 +12,7 @@ version = "0.1.0"
 default = ["console_error_panic_hook"]
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 console_error_panic_hook = {version = "0.1.6", optional = true}
@@ -33,4 +34,13 @@ features = [
 version = "0.3.4"
 
 [dev-dependencies]
+criterion = "0.3"
+rand = "0.8"
 wasm-bindgen-test = "0.3"
+
+[[bench]]
+harness = false
+name = "demons_bench"
+
+[profile.release]
+lto = true

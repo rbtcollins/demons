@@ -1,6 +1,7 @@
+mod simulation;
 mod utils;
 
-use std::mem;
+use std::convert::TryInto;
 
 use js_sys::Math::random;
 use wasm_bindgen::prelude::*;
@@ -10,6 +11,7 @@ use web_sys::{
     HtmlCanvasElement, WebGlBuffer, WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlTexture,
 };
 
+pub use simulation::*;
 pub use utils::*;
 
 #[wasm_bindgen]
@@ -42,15 +44,12 @@ pub struct Loop {
     vertex_buffer: WebGlBuffer,
     texture_coord_buffer: WebGlBuffer,
     triangles_buffer: WebGlBuffer,
-    width: u32,
-    height: u32,
     next: Vec<u8>,
     states: Vec<Colour>,
     initialised: bool,
-    state: Vec<u8>,
-    new_state: Vec<u8>,
     vertex_attribute_index: u32,
     texture_coord_index: u32,
+    simulation: Simulation,
 }
 
 impl Loop {
@@ -142,78 +141,12 @@ impl Loop {
     }
 
     fn next_state(&mut self) {
-        let state_length = self.state.len();
-        let state_end = state_length - 1;
-        let width = self.width as usize;
-        let last_row = state_length - width;
-        let mut new_state = mem::take(&mut self.new_state);
-        let prev = |offset| -> u8 {
-            // console::log_1(&"a".into());
-            if offset != 0 {
-                self.state[offset - 1]
-            } else {
-                self.state[state_end]
-            }
-        };
-        let next = |offset| -> u8 {
-            // console::log_1(&"b".into());
-            if offset != state_end {
-                self.state[offset + 1]
-            } else {
-                self.state[0]
-            }
-        };
-        let above = |offset| -> u8 {
-            // console::log_1(&"c".into());
-            if offset >= width {
-                self.state[offset - width]
-            } else {
-                self.state[last_row + offset]
-            }
-        };
-        let below = |offset| -> u8 {
-            // console::log_1(&"d".into());
-            if offset < last_row {
-                self.state[offset + width]
-            } else {
-                self.state[offset - last_row]
-            }
-        };
-        let mut offset = 0;
-        for _x in 0..self.width {
-            for _y in 0..self.height {
-                let mut cell = self.state[offset];
-                // Be eaten by the next state up
-                let eaten_by = (cell + 1) % self.states.len() as u8;
-                if prev(offset) == eaten_by
-                    || next(offset) == eaten_by
-                    || above(offset) == eaten_by
-                    || below(offset) == eaten_by
-                {
-                    cell = eaten_by;
-                }
-                new_state[offset] = cell;
-                offset += 1;
-            }
-        }
-        self.new_state = new_state;
-        mem::swap(&mut self.state, &mut self.new_state);
+        self.simulation.next_state();
     }
 
     // fn num_states(&self) -> usize {
     //     self.states.len()
     // }
-
-    fn seed_state(state: &mut Vec<u8>, width: u32, height: u32, states: u8) {
-        let mut offset = 0;
-        for _x in 0..width {
-            for _y in 0..height {
-                let cell = (random() * states as f64).floor() as u8;
-                state[offset] = cell;
-                offset += 1;
-            }
-        }
-    }
 
     fn init_array_f32_buffer(
         gl_ctx: &WebGlRenderingContext,
@@ -308,48 +241,51 @@ impl Loop {
         let vertex_attribute_index = gl_ctx.get_attrib_location(&gl_program, "position") as u32;
         let texture_coord_index = gl_ctx.get_attrib_location(&gl_program, "a_texcoord") as u32;
 
-        Ok(Loop {
-            width,
+        let simulation = Simulation {
             height,
-            // canvas,
-            gl_ctx,
-            gl_texture,
-            gl_program,
-            vertex_buffer,
-            texture_coord_buffer,
-            triangles_buffer,
-            next: vec![0; array_size],
-            states: vec![],
-            initialised: false,
-            state,
             new_state,
-            vertex_attribute_index,
+            state,
+            states: 0,
+            width,
+        };
+
+        Ok(Loop {
+            gl_ctx,
+            gl_program,
+            gl_texture,
+            initialised: false,
+            next: vec![0; array_size],
+            simulation,
+            states: vec![],
+            texture_coord_buffer,
             texture_coord_index,
+            triangles_buffer,
+            vertex_attribute_index,
+            vertex_buffer,
         })
     }
 
     pub fn empty_states(&mut self) {
         self.states.clear();
+        self.simulation
+            .set_states(self.states.len().try_into().expect("too many colours"));
     }
 
     pub fn push_colour(&mut self, colour: Colour) {
         self.states.push(colour);
+        self.simulation
+            .set_states(self.states.len().try_into().expect("too many colours"));
     }
 
     pub fn tick(&mut self) -> Result<(), JsValue> {
         if !self.initialised {
-            Loop::seed_state(
-                &mut self.state,
-                self.width,
-                self.height,
-                self.states.len() as u8,
-            );
+            self.simulation.seed(random);
             self.initialised = true;
         } else {
             self.next_state();
         }
 
-        let states_iter = self.state.iter();
+        let states_iter = self.simulation.state.iter();
         let texture_iter = self.next.chunks_exact_mut(4);
         let zipped = states_iter.zip(texture_iter);
         for (state, chunk) in zipped {
@@ -373,7 +309,7 @@ impl Loop {
                     WebGlRenderingContext::TEXTURE_2D,
                     0,
                     WebGlRenderingContext::RGBA as i32,
-                    self.width as i32, self.height as i32, 0,
+                    self.simulation.width as i32, self.simulation.height as i32, 0,
                     WebGlRenderingContext::RGBA, WebGlRenderingContext::UNSIGNED_BYTE, Some(&pixel_array)
                  )?;
                 self.gl_ctx.tex_parameteri(
@@ -448,11 +384,6 @@ impl Loop {
     }
 
     pub fn reset(&mut self) {
-        Loop::seed_state(
-            &mut self.state,
-            self.width,
-            self.height,
-            self.states.len() as u8,
-        );
+        self.simulation.seed(random);
     }
 }
