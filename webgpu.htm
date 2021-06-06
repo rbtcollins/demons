@@ -1,8 +1,48 @@
 <!DOCTYPE html>
 <html>
 
+<head>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            font-size: 100%;
+            font: inherit;
+            vertical-align: baseline;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: start;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        canvas {
+            margin: 0 auto;
+            padding: 0;
+            display: block;
+        }
+
+        #canvasholder {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
 <body>
-    <canvas id="c" width="3840" height="2160"></canvas>
+    <div class="controls">
+        <div>
+            <input type="range" id="states" name="states" min="2" max="32" , value="8">
+            <label for="states">States</label>
+        </div>
+        <button class="button-primary" id="render">render</button>
+    </div>
+    <div id="canvasholder">
+        <canvas id="c"></canvas>
+    </div>
     <script>
         (async function () {
             function push_colour(colours, red, green, blue) {
@@ -15,24 +55,27 @@
             }
             function set_states(colours, states) {
                 // no colours
+                colours.splice(4, colours.length);
                 colours[0] = 0;
 
                 if (states <= 8) {
-                    push_colour(colours, 0, 0, 0);
-                    if (states == 1) { return; }
-                    push_colour(colours, 255, 0, 0);
-                    if (states == 2) { return; }
-                    push_colour(colours, 255, 255, 0);
-                    if (states == 3) { return; }
-                    push_colour(colours, 0, 255, 0);
-                    if (states == 4) { return; }
-                    push_colour(colours, 0, 255, 255);
-                    if (states == 5) { return; }
-                    push_colour(colours, 0, 0, 255);
-                    if (states == 6) { return; }
-                    push_colour(colours, 255, 0, 255);
-                    if (states == 7) { return; }
-                    push_colour(colours, 255, 255, 255);
+                    (function () {
+                        push_colour(colours, 0, 0, 0);
+                        if (states == 1) { return; }
+                        push_colour(colours, 255, 0, 0);
+                        if (states == 2) { return; }
+                        push_colour(colours, 255, 255, 0);
+                        if (states == 3) { return; }
+                        push_colour(colours, 0, 255, 0);
+                        if (states == 4) { return; }
+                        push_colour(colours, 0, 255, 255);
+                        if (states == 5) { return; }
+                        push_colour(colours, 0, 0, 255);
+                        if (states == 6) { return; }
+                        push_colour(colours, 255, 0, 255);
+                        if (states == 7) { return; }
+                        push_colour(colours, 255, 255, 255);
+                    })();
                 } else {
                     // total number of steps : one per state total amount of colour
                     // range to move across: 8 transitions of 255, divided by steps.
@@ -75,11 +118,29 @@
                     add_colour(7, 255, 0, 0, 1, 255, 0);
                 }
 
-            }
+                const buffer = device.createBuffer({
+                    label: `states: ${states}`,
+                    mappedAtCreation: true,
+                    size: (colours[0] + 1) * 16, // vec4<u32> size + vec4<f32>
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+                });
+                new Uint32Array(buffer.getMappedRange(0, 16)).set(colours.slice(0, 4));
+                new Float32Array(buffer.getMappedRange(16)).set(colours.slice(4,));
+                buffer.unmap();
 
+                return buffer;
+            }
+            const canvasHolder = document.getElementById('canvasholder');
             const canvas = document.querySelector("canvas");
-            const width = canvas.width;
-            const height = canvas.height;
+            const width = canvasHolder.scrollWidth;
+            const height = canvasHolder.scrollHeight;
+            console.log(width, height);
+            canvas.width = width;
+            canvas.height = height;
+            const renderBtn = document.getElementById('render');
+            const rangeCtl = document.getElementById('states');
+
+
 
             const gpuContext = canvas.getContext("gpupresent");
 
@@ -103,19 +164,7 @@
 
             // Color map:
             let colours = [0, 0, 0, 0]; // 1 value, 3 pads
-            set_states(colours, 24);
-            // for (let o = 1; o < colours[0]; o++) {
-            //     console.log(o, colours.slice(o * 4, (o + 1) * 4));
-            // }
-
-            const gpuBufferColours = device.createBuffer({
-                mappedAtCreation: true,
-                size: (colours[0] + 1) * 16, // vec4<u32> size + vec4<f32>
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-            });
-            new Uint32Array(gpuBufferColours.getMappedRange(0, 16)).set(colours.slice(0, 4));
-            new Float32Array(gpuBufferColours.getMappedRange(16)).set(colours.slice(4,));
-            gpuBufferColours.unmap();
+            var gpuBufferColours = set_states(colours, 15);
 
             // First Matrix
 
@@ -136,6 +185,29 @@
                 new Uint32Array(arrayBufferFirstMatrix).set(firstMatrix);
             }
             gpuBufferFirstMatrix.unmap();
+
+            const randomise_content = function () {
+                /// -----------
+                var _firstMatrix = [
+                    width /* rows */, height /* columns */,
+                ];
+                for (let o = 0; o < width * height; o++) {
+                    _firstMatrix.push(Math.floor(Math.random() * colours[0]));
+                }
+                const firstMatrix = new Uint32Array(_firstMatrix);
+                const gpuBufferFirstMatrix = device.createBuffer({
+                    mappedAtCreation: true,
+                    size: firstMatrix.byteLength,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                });
+                {
+                    const arrayBufferFirstMatrix = gpuBufferFirstMatrix.getMappedRange();
+                    new Uint32Array(arrayBufferFirstMatrix).set(firstMatrix);
+                }
+                gpuBufferFirstMatrix.unmap();
+                /// ----------------
+            };
+
 
             console.log(device);
 
@@ -261,8 +333,9 @@
             }
 
             ];
-            const computeBindGroup = device.createBindGroup({
-                layout: computePipeline.getBindGroupLayout(0 /* index */),
+            const computeLayout = computePipeline.getBindGroupLayout(0 /* index */);
+            var computeBindGroup = device.createBindGroup({
+                layout: computeLayout,
                 // layout: ComputeGPUBindGroupLayout,
                 entries: computeBindEntries
             });
@@ -451,7 +524,25 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
 
 
             /*** Rendering ***/
+            // Need to do a reset on the first time through
+            var reset = true;
             const renderLoop = async () => {
+                if (reset) {
+                    const states = parseFloat(rangeCtl.value) || 2;
+                    old_states = (colours.length / 4) - 1;
+                    gpuBufferColours = set_states(colours, states);
+                    computeBindEntries[2].resource.buffer = gpuBufferColours;
+                    computeBindGroup = device.createBindGroup({
+                        label: `states: ${states}`,
+                        layout: computeLayout,
+                        // layout: ComputeGPUBindGroupLayout,
+                        entries: computeBindEntries
+                    });
+                    if (states > old_states) {
+                        randomise_content();
+                    }
+                    reset = false;
+                }
                 const swapChainTexture = swapChain.getCurrentTexture();
                 const GPUTextureView = swapChainTexture.createView(GPUTextureViewDescriptor);
                 const colorAttachmentDescriptor = {
@@ -514,6 +605,18 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                 requestAnimationFrame(renderLoop);
             };
             requestAnimationFrame(renderLoop);
+            const loop_reset = function () {
+                reset = true;
+            };
+
+            // Wire up events
+            renderBtn.addEventListener('click', () => {
+                loop_reset();
+            });
+            // rangeCtl.addEventListener('change', () => {
+
+            //     loop_reset();
+            // });
         })();
     </script>
 </body>
