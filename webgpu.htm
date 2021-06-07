@@ -174,7 +174,14 @@
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             });
 
-            const randomise_content = function () {
+            // Result Matrix
+            const resultMatrixBufferSize = Uint32Array.BYTES_PER_ELEMENT * (2 + width * height);
+            const resultMatrixBuffer = device.createBuffer({
+                size: resultMatrixBufferSize,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+
+            const randomise_content = function (flipped) {
                 /// -----------
                 var _newMatrix = [
                     width /* rows */, height /* columns */,
@@ -198,7 +205,7 @@
                 commandEncoder.copyBufferToBuffer(
                     gpuBufferNewMatrix /* source buffer */,
                     0 /* source offset */,
-                    gpuBufferFirstMatrix /* destination buffer */,
+                    flipped ? gpuBufferFirstMatrix : resultMatrixBuffer /* destination buffer */,
                     0 /* destination offset */,
                     newMatrix.byteLength /* size */
                 );
@@ -209,13 +216,6 @@
 
 
 
-            // Result Matrix
-
-            const resultMatrixBufferSize = Uint32Array.BYTES_PER_ELEMENT * (2 + width * height);
-            const resultMatrixBuffer = device.createBuffer({
-                size: resultMatrixBufferSize,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-            });
 
 
 
@@ -303,7 +303,7 @@
                 }
             })
 
-            const computeBindEntries = [{
+            const computeBindEntries1 = [{
                 binding: 0,
                 // visibility: GPUShaderStageFlags.COMPUTE,
                 resource: {
@@ -328,20 +328,54 @@
                 binding: 3,
                 // visibility: GPUShaderStageFlags.COMPUTE,
                 resource: renderTextureView
-            }
+            }];
+            const computeBindEntries2 = [{
+                binding: 0,
+                // visibility: GPUShaderStageFlags.COMPUTE,
+                resource: {
+                    buffer: resultMatrixBuffer
+                }
+            },
+            {
+                binding: 1,
+                // visibility: GPUShaderStageFlags.COMPUTE,
+                resource: {
+                    buffer: gpuBufferFirstMatrix
+                }
+            },
+            {
+                binding: 2,
+                // visibility: GPUShaderStageFlags.COMPUTE,
+                resource: {
+                    buffer: gpuBufferColours
+                }
+            },
+            {
+                binding: 3,
+                // visibility: GPUShaderStageFlags.COMPUTE,
+                resource: renderTextureView
+            }];
 
-            ];
+
             const computeLayout = computePipeline.getBindGroupLayout(0 /* index */);
-            var computeBindGroup = device.createBindGroup({
+            var computeBindGroup1 = device.createBindGroup({
                 layout: computeLayout,
                 // layout: ComputeGPUBindGroupLayout,
-                entries: computeBindEntries
+                entries: computeBindEntries1
             });
-            const cellToTextureBindGroup = device.createBindGroup({
+            const cellToTextureBindGroup1 = device.createBindGroup({
                 layout: cellToTexturePipeline.getBindGroupLayout(0),
-                entries: computeBindEntries
+                entries: computeBindEntries1
             });
-
+            var computeBindGroup2 = device.createBindGroup({
+                layout: computeLayout,
+                // layout: ComputeGPUBindGroupLayout,
+                entries: computeBindEntries2
+            });
+            const cellToTextureBindGroup2 = device.createBindGroup({
+                layout: cellToTexturePipeline.getBindGroupLayout(0),
+                entries: computeBindEntries2
+            });
 
             const positionLocation = 0;
             const colorLocation = 1;
@@ -524,20 +558,26 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
             /*** Rendering ***/
             // Need to do a reset on the first time through
             var reset = true;
+            var flipped = 0;
             const renderLoop = async () => {
                 if (reset) {
                     const states = parseFloat(rangeCtl.value) || 2;
                     old_states = (colours.length / 4) - 1;
                     gpuBufferColours = set_states(colours, states);
-                    computeBindEntries[2].resource.buffer = gpuBufferColours;
-                    computeBindGroup = device.createBindGroup({
+                    computeBindEntries1[2].resource.buffer = gpuBufferColours;
+                    computeBindEntries2[2].resource.buffer = gpuBufferColours;
+                    computeBindGroup1 = device.createBindGroup({
                         label: `states: ${states}`,
                         layout: computeLayout,
-                        // layout: ComputeGPUBindGroupLayout,
-                        entries: computeBindEntries
+                        entries: computeBindEntries1
+                    });
+                    computeBindGroup2 = device.createBindGroup({
+                        label: `states: ${states}`,
+                        layout: computeLayout,
+                        entries: computeBindEntries2
                     });
                     if (states > old_states) {
-                        randomise_content();
+                        randomise_content(flipped);
                     }
                     reset = false;
                 }
@@ -563,7 +603,7 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                 {
                     const passEncoder = commandEncoder.beginComputePass();
                     passEncoder.setPipeline(computePipeline);
-                    passEncoder.setBindGroup(0, computeBindGroup);
+                    passEncoder.setBindGroup(0, flipped ? computeBindGroup1 : computeBindGroup2);
                     passEncoder.dispatch(width /* x */, height /* y */);
                     passEncoder.endPass();
                 }
@@ -571,7 +611,7 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                 {
                     const passEncoder = commandEncoder.beginComputePass();
                     passEncoder.setPipeline(cellToTexturePipeline);
-                    passEncoder.setBindGroup(0, computeBindGroup);
+                    passEncoder.setBindGroup(0, flipped ? computeBindGroup1 : computeBindGroup2);
                     passEncoder.dispatch(width /* x */, height /* y */);
                     passEncoder.endPass();
                 }
@@ -590,16 +630,11 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                 renderPassEncoder.drawIndexed(6); // 3 vertices
                 renderPassEncoder.endPass();
 
-                // Stage 4: copy the output state back to the input state
-                commandEncoder.copyBufferToBuffer(
-                    resultMatrixBuffer /* source buffer */,
-                    0 /* source offset */,
-                    gpuBufferFirstMatrix /* destination buffer */,
-                    0 /* destination offset */,
-                    resultMatrixBufferSize /* size */
-                );
-
                 device.queue.submit([commandEncoder.finish()]);
+
+                // Stage 4: flip buffers
+                flipped = (flipped + 1) % 2;
+                // console.log(flipped);
                 requestAnimationFrame(renderLoop);
             };
             requestAnimationFrame(renderLoop);
