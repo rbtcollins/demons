@@ -167,15 +167,29 @@
             var gpuBufferColours = set_states(colours, 15);
             console.log(device);
 
+            // Dimensions buffer
+            const dimensions = [width, height];
+            const gpuDimensionsBuffer = device.createBuffer({
+                mappedAtCreation: true,
+                size: 8, // u32 * 2
+                usage: GPUBufferUsage.STORAGE,
+            });
+            {
+                const dimMatrix = new Uint32Array(dimensions);
+                const bufferMatrix = gpuDimensionsBuffer.getMappedRange();
+                new Uint32Array(bufferMatrix).set(dimMatrix);
+                gpuDimensionsBuffer.unmap();
+            }
+
             // First Matrix
             const gpuBufferFirstMatrix = device.createBuffer({
                 mappedAtCreation: false,
-                size: width * height * 4 + 8,
+                size: width * height * 4,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             });
 
             // Result Matrix
-            const resultMatrixBufferSize = Uint32Array.BYTES_PER_ELEMENT * (2 + width * height);
+            const resultMatrixBufferSize = Uint32Array.BYTES_PER_ELEMENT * (width * height);
             const resultMatrixBuffer = device.createBuffer({
                 size: resultMatrixBufferSize,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
@@ -184,7 +198,6 @@
             const randomise_content = function (flipped) {
                 /// -----------
                 var _newMatrix = [
-                    width /* rows */, height /* columns */,
                 ];
                 for (let o = 0; o < width * height; o++) {
                     _newMatrix.push(Math.floor(Math.random() * colours[0]));
@@ -214,11 +227,6 @@
             };
             randomise_content();
 
-
-
-
-
-
             // Texture to store renders : float32x4
             const gpuStateTexture = device.createTexture({
                 size: { width: width, height: height },
@@ -230,10 +238,14 @@
 
             const computerShaderModule = device.createShaderModule({
                 code: `
-    [[block]] struct Matrix {
+    [[block]] struct Dimensions {
       size : vec2<u32>;
+    };
+
+    [[block]] struct Matrix {
       numbers: array<u32>;
     };
+
     [[block]] struct Colours {
         size: vec4<u32>;
         colours: array<vec4<f32>>;
@@ -243,9 +255,10 @@
     [[group(0), binding(1)]] var<storage> resultMatrix : [[access(write)]] Matrix;
     [[group(0), binding(2)]] var<storage> colours : [[access(read)]] Colours;
     [[group(0), binding(3)]] var texture :[[access(write)]] texture_storage_2d<rgba32float>;
+    [[group(0), binding(4)]] var<storage> dimensions : [[access(read)]] Dimensions;
 
     fn get_index(resultCell: vec2<u32>) -> u32 {
-        return resultCell.y + resultCell.x * firstMatrix.size.y;
+        return resultCell.y + resultCell.x * dimensions.size.y;
     }
 
     fn get_with_offset(pos: vec2<u32>, dims: vec2<i32>, x: i32, y: i32) -> u32 {
@@ -258,8 +271,6 @@
 
 
     [[stage(compute)]] fn main([[builtin(global_invocation_id)]] global_id : vec3<u32>) {
-        // is this a perf issue?
-        resultMatrix.size = vec2<u32>(firstMatrix.size.x, firstMatrix.size.y);
         let texture_dimensions: vec2<i32> = textureDimensions(texture);
         let resultCell : vec2<u32> = vec2<u32>(global_id.x, global_id.y);
         let above :u32 = get_with_offset(resultCell, texture_dimensions, 0, 1);
@@ -281,7 +292,7 @@
 
     [[stage(compute)]] fn state_to_texture([[builtin(global_invocation_id)]] global_id : vec3<u32>) {
         let resultCell : vec2<i32> = vec2<i32>(i32(global_id.x), i32(global_id.y));
-        let index : i32 = resultCell.y + resultCell.x * i32(resultMatrix.size.y);
+        let index : i32 = resultCell.y + resultCell.x * i32(dimensions.size.y);
         let state: u32 = (u32(resultMatrix.numbers[index])  ) % colours.size.x;
         let colour: vec4<f32> = colours.colours[state];
         // let colour : vec4<f32> = vec4<f32>(f32(global_id.x), f32(global_id.y), f32((global_id.x+global_id.y))/2., 1.0);
@@ -328,7 +339,12 @@
                 binding: 3,
                 // visibility: GPUShaderStageFlags.COMPUTE,
                 resource: renderTextureView
-            }];
+            },
+            {
+                binding: 4,
+                resource: { buffer: gpuDimensionsBuffer }
+            }
+            ];
             const computeBindEntries2 = [{
                 binding: 0,
                 // visibility: GPUShaderStageFlags.COMPUTE,
@@ -354,6 +370,10 @@
                 binding: 3,
                 // visibility: GPUShaderStageFlags.COMPUTE,
                 resource: renderTextureView
+            },
+            {
+                binding: 4,
+                resource: { buffer: gpuDimensionsBuffer }
             }];
 
 
