@@ -165,55 +165,53 @@
             // Color map:
             let colours = [0, 0, 0, 0]; // 1 value, 3 pads
             var gpuBufferColours = set_states(colours, 15);
+            console.log(device);
 
             // First Matrix
-
-            var _firstMatrix = [
-                width /* rows */, height /* columns */,
-            ];
-            for (let o = 0; o < width * height; o++) {
-                _firstMatrix.push(Math.floor(Math.random() * colours[0]));
-            }
-            const firstMatrix = new Uint32Array(_firstMatrix);
             const gpuBufferFirstMatrix = device.createBuffer({
-                mappedAtCreation: true,
-                size: firstMatrix.byteLength,
+                mappedAtCreation: false,
+                size: width * height * 4 + 8,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             });
-            {
-                const arrayBufferFirstMatrix = gpuBufferFirstMatrix.getMappedRange();
-                new Uint32Array(arrayBufferFirstMatrix).set(firstMatrix);
-            }
-            gpuBufferFirstMatrix.unmap();
 
             const randomise_content = function () {
                 /// -----------
-                var _firstMatrix = [
+                var _newMatrix = [
                     width /* rows */, height /* columns */,
                 ];
                 for (let o = 0; o < width * height; o++) {
-                    _firstMatrix.push(Math.floor(Math.random() * colours[0]));
+                    _newMatrix.push(Math.floor(Math.random() * colours[0]));
                 }
-                const firstMatrix = new Uint32Array(_firstMatrix);
-                const gpuBufferFirstMatrix = device.createBuffer({
+                const newMatrix = new Uint32Array(_newMatrix);
+                const gpuBufferNewMatrix = device.createBuffer({
                     mappedAtCreation: true,
-                    size: firstMatrix.byteLength,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                    size: newMatrix.byteLength,
+                    usage: GPUBufferUsage.COPY_SRC,
                 });
                 {
-                    const arrayBufferFirstMatrix = gpuBufferFirstMatrix.getMappedRange();
-                    new Uint32Array(arrayBufferFirstMatrix).set(firstMatrix);
+                    const arrayBufferNewMatrix = gpuBufferNewMatrix.getMappedRange();
+                    new Uint32Array(arrayBufferNewMatrix).set(newMatrix);
                 }
-                gpuBufferFirstMatrix.unmap();
-                /// ----------------
+                gpuBufferNewMatrix.unmap();
+                const commandEncoder = device.createCommandEncoder();
+
+                commandEncoder.copyBufferToBuffer(
+                    gpuBufferNewMatrix /* source buffer */,
+                    0 /* source offset */,
+                    gpuBufferFirstMatrix /* destination buffer */,
+                    0 /* destination offset */,
+                    newMatrix.byteLength /* size */
+                );
+
+                device.queue.submit([commandEncoder.finish()]);
             };
+            randomise_content();
 
 
-            console.log(device);
 
             // Result Matrix
 
-            const resultMatrixBufferSize = Uint32Array.BYTES_PER_ELEMENT * (2 + firstMatrix[0] * firstMatrix[1]);
+            const resultMatrixBufferSize = Uint32Array.BYTES_PER_ELEMENT * (2 + width * height);
             const resultMatrixBuffer = device.createBuffer({
                 size: resultMatrixBufferSize,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
@@ -223,7 +221,7 @@
 
             // Texture to store renders : float32x4
             const gpuStateTexture = device.createTexture({
-                size: { width: firstMatrix[0], height: firstMatrix[1] },
+                size: { width: width, height: height },
                 format: renderFormat,
                 usage: GPUTextureUsage.STORAGE | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_SRC
             });
@@ -518,7 +516,7 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
             });
             // // Get a GPU buffer for debugging the automata as a texture
             const gpuTextureBuffer = device.createBuffer({
-                size: firstMatrix[0] * firstMatrix[0] * 16,
+                size: width * width * 16,
                 usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
             });
 
@@ -566,7 +564,7 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                     const passEncoder = commandEncoder.beginComputePass();
                     passEncoder.setPipeline(computePipeline);
                     passEncoder.setBindGroup(0, computeBindGroup);
-                    passEncoder.dispatch(firstMatrix[0] /* x */, firstMatrix[1] /* y */);
+                    passEncoder.dispatch(width /* x */, height /* y */);
                     passEncoder.endPass();
                 }
                 // Stage 2: convert cell matrix to texture format
@@ -574,7 +572,7 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                     const passEncoder = commandEncoder.beginComputePass();
                     passEncoder.setPipeline(cellToTexturePipeline);
                     passEncoder.setBindGroup(0, computeBindGroup);
-                    passEncoder.dispatch(firstMatrix[0] /* x */, firstMatrix[1] /* y */);
+                    passEncoder.dispatch(width /* x */, height /* y */);
                     passEncoder.endPass();
                 }
 
