@@ -150,7 +150,7 @@
             if (!adapter) return;
             const device = await adapter.requestDevice();
 
-            const swapChainFormat = gpuContext.getSwapChainPreferredFormat(adapter);
+            const swapChainFormat = gpuContext.getPreferredFormat(adapter);
             const renderFormat = "rgba32float";
             console.log(swapChainFormat);
             const swapChainDescriptor = {
@@ -159,8 +159,7 @@
                 usage: GPUTextureUsage.RENDER_ATTACHMENT
             };
 
-            let swapChain = gpuContext.configureSwapChain(swapChainDescriptor);
-            console.log(swapChain);
+            gpuContext.configure(swapChainDescriptor);
 
             // Color map:
             let colours = [0, 0, 0, 0]; // 1 value, 3 pads
@@ -251,11 +250,11 @@
         colours: array<vec4<f32>>;
     };
 
-    [[group(0), binding(0)]] var<storage> firstMatrix : [[access(read)]] Matrix;
-    [[group(0), binding(1)]] var<storage> resultMatrix : [[access(write)]] Matrix;
-    [[group(0), binding(2)]] var<storage> colours : [[access(read)]] Colours;
-    [[group(0), binding(3)]] var texture :[[access(write)]] texture_storage_2d<rgba32float>;
-    [[group(0), binding(4)]] var<storage> dimensions : [[access(read)]] Dimensions;
+    [[group(0), binding(0)]] var<storage,read> firstMatrix : Matrix;
+    [[group(0), binding(1)]] var<storage,write> resultMatrix : Matrix;
+    [[group(0), binding(2)]] var<storage,read> colours :  Colours;
+    [[group(0), binding(3)]] var texture : texture_storage_2d<rgba32float,write>;
+    [[group(0), binding(4)]] var<storage,read> dimensions : Dimensions;
 
     fn get_index(resultCell: vec2<u32>) -> u32 {
         return resultCell.y + resultCell.x * dimensions.size.y;
@@ -407,7 +406,7 @@ fn vertex([[location(0)]] vertex: vec3<f32>  ) -> [[builtin(position)]] vec4<f32
 }
 
 
-[[group(0), binding(0)]] var texture :[[access(read)]] texture_2d<f32>;
+[[group(0), binding(0)]] var texture : texture_2d<f32>;
 [[group(0), binding(1)]] var texture_sampler : sampler;
 
 [[stage(fragment)]]
@@ -601,7 +600,7 @@ fn fragment([[builtin(position)]] coord_in: vec4<f32>) -> [[location(0)]] vec4<f
                     }
                     reset = false;
                 }
-                const swapChainTexture = swapChain.getCurrentTexture();
+                const swapChainTexture = gpuContext.getCurrentTexture();
                 const GPUTextureView = swapChainTexture.createView(GPUTextureViewDescriptor);
                 const colorAttachmentDescriptor = {
                     view: GPUTextureView,
