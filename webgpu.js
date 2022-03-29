@@ -84,14 +84,12 @@
 
         return buffer;
     }
-    const canvasHolder = document.getElementById('canvasholder');
-    if (canvasHolder === null) throw 'missing canvasholder element';
     const canvas = document.querySelector("canvas");
     if (canvas === null) {
         throw 'missing canvas';
     }
-    const width = canvasHolder.scrollWidth;
-    const height = canvasHolder.scrollHeight;
+    const width = canvas.scrollWidth;
+    const height = canvas.scrollHeight;
     console.log(width, height);
     canvas.width = width;
     canvas.height = height;
