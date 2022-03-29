@@ -102,7 +102,7 @@
         throw 'missing supported div';
     }
 
-    supportedDiv.innerHTML = `<input disabled="true" type="checkbox" checked="${'gpu' in navigator}"/>`;
+    supportedDiv.innerHTML = `<input id="supportedid" disabled="true" type="checkbox" checked="${'gpu' in navigator}"/>`;
 
     const gpuContext = canvas.getContext("webgpu");
     if (gpuContext === null) throw 'missing GPU Context';

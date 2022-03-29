@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html>
-<meta http-equiv="origin-trial"
-  content="AnqXVg+FsiD5CEIXE3/wNcEt065CuPZAjk7aXgY1Vfb1VNi3cOIQMBPQV2YomRnyxGkYxdolB5NhtK5wtvGuswAAAAB2eyJvcmlnaW4iOiJodHRwczovL3JidGNvbGxpbnMtZXhwZXJpbWVudHMuczMuYXAtc291dGhlYXN0LTIuYW1hem9uYXdzLmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ==">
-
-</html>
+<html lang="en">
 
 <head>
+    <meta http-equiv="origin-trial"
+      content="AnqXVg+FsiD5CEIXE3/wNcEt065CuPZAjk7aXgY1Vfb1VNi3cOIQMBPQV2YomRnyxGkYxdolB5NhtK5wtvGuswAAAAB2eyJvcmlnaW4iOiJodHRwczovL3JidGNvbGxpbnMtZXhwZXJpbWVudHMuczMuYXAtc291dGhlYXN0LTIuYW1hem9uYXdzLmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ==">
+
+    <title>Demons</title>
     <style>
         html,
         body {
@@ -53,16 +53,16 @@
     <div class="controls">
         <div>
             <label for="states">States</label>
-            <input type="range" id="states" name="states" min="2" max="32" , value="8">
+            <input type="range" id="states" name="states" min="2" max="32" value="8">
         </div>
         <button class="button-primary" id="render">render</button>
         <div>
-            <label for="supported">Supported</label>
-            <span id="supported"></span>
+            <label for="supportedid">Supported</label>
+            <span id="supported"><input type="checkbox" id="supportedid" /></span>
         </div>
     </div>
     <canvas id="c"></canvas>
-    <script src="webgpu.js" />
+    <script src="webgpu.js"></script>
 </body>
 
 </html>
